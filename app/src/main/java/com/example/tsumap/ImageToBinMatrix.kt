@@ -64,7 +64,6 @@ fun imageToBitMatrix(context: Context): BitMatrix? {
 }
 
 // МОЖНО СКАЗАТЬ ОПТИМИЗАЕЙШОН
-@Composable
 fun initBitMatrix(context: Context): BitMatrix?{
     // ПЫТАЕМСЯ ЗАГРУЗИТЬ КЕШУ
     val cache = BitMatrixCache(context).load()
