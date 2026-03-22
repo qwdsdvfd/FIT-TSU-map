@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import java.io.File
 import android.util.Log
-import androidx.compose.runtime.Composable
 
 class BitMatrix(private val height: Int, private val width: Int, private val bitSet: BitSet) {
     val data = bitSet
@@ -75,8 +74,7 @@ fun initBitMatrix(context: Context): BitMatrix?{
 
         // НЕ СМОГЛИ - ЗАГРУЗКА БИНКИ
         return try{
-            val bitmatrix = imageToBitMatrix(context)
-            bitmatrix
+            imageToBitMatrix(context)
         }
         catch (e: Exception){
             Log.e("BitMatrix", "Ошибка создания матрицы из изображения: ${e.message}")

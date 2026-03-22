@@ -30,7 +30,8 @@ fun TSUMAPApp() {
     var fileName by remember { mutableStateOf("map_walk.png") }  // текущий файл
     val context = LocalContext.current
 
-    initBitMatrix(context)
+    PUBLICMATRIX.set(initBitMatrix(context))
+
     Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         MapFromAssets(fileName)  // передаём имя файла
 
