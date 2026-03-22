@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import java.io.File
 import android.util.Log
+import androidx.compose.runtime.Composable
 
 class BitMatrix(private val height: Int, private val width: Int, private val bitSet: BitSet) {
     val data = bitSet
@@ -63,13 +64,12 @@ fun imageToBitMatrix(context: Context): BitMatrix? {
 }
 
 // МОЖНО СКАЗАТЬ ОПТИМИЗАЕЙШОН
+@Composable
 fun initBitMatrix(context: Context): BitMatrix?{
     // ПЫТАЕМСЯ ЗАГРУЗИТЬ КЕШУ
     val cache = BitMatrixCache(context).load()
 
-    return try{
-        cache
-    }
+    return try{ cache }
     catch (e: Exception){
         Log.e("BitMatrix", "Ошибка чтения кэша: ${e.message}")
 

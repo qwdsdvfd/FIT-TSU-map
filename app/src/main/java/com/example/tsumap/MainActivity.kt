@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -27,7 +28,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TSUMAPApp() {
     var fileName by remember { mutableStateOf("map_walk.png") }  // текущий файл
+    val context = LocalContext.current
 
+    initBitMatrix(context)
     Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         MapFromAssets(fileName)  // передаём имя файла
 
