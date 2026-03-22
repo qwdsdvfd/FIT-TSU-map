@@ -22,6 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FIT-TSU-map"
+rootProject.name = "TSU MAP"
 include(":app")
- 
