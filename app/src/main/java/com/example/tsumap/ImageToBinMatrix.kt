@@ -1,84 +1,72 @@
 package com.example.tsumap
 
 import android.content.Context
-import java.util.BitSet
 import android.graphics.BitmapFactory
 import android.graphics.Color
-import java.io.File
 import android.util.Log
+import java.io.File
+import java.util.BitSet
 
-class BitMatrix(private val height: Int, private val width: Int, private val bitSet: BitSet) {
-    val data = bitSet
-    val datawidth = width
-    val dataheight = height
-
+class matrixToBit(val height: Int, val width: Int, val data: BitSet) {
     fun get(x: Int, y: Int): Boolean = data[y * width + x]
-
-    fun set(x: Int, y: Int, value: Boolean){
-        if (value) data.set(y * width + x)
-        else data.clear(y * width + x)
+    fun set(x: Int, y: Int, value: Boolean) {
+        if (value) data.set(y * width + x) else data.clear(y * width + x)
     }
 }
 
-class BitMatrixCache(private val context: Context){
-    fun save(matrix: BitMatrix){
-        val file = File(context.filesDir, "BitMatrixSave_${matrix.dataheight}_${matrix.datawidth}.bin")
-        file.writeBytes(matrix.data.toByteArray())
-    }
-
-    fun load(): BitMatrix?{
-        val file = context.filesDir.listFiles()?.firstOrNull { it.name.startsWith("BitMatrixSave") }
-        return if (file != null){
-            val trueName = file.name.removeSuffix(".bin")
-            val height = trueName.split("_")[1].toInt()
-            val width = trueName.split("_")[2].toInt()
-            BitMatrix(height, width, BitSet.valueOf(file.readBytes()))
-        }
-        else null
-    }
-}
-
-fun imageToBitMatrix(context: Context): BitMatrix? {
-    val bitmap = context.assets.open("skeleton.png").use { input -> BitmapFactory.decodeStream(input)}
-    if (bitmap == null) return null
-    val width = bitmap.width
-    val height = bitmap.height
-    val totalPixels = width * height
-    val bitSet = BitSet(totalPixels)
-
-    for (y in 0 until height) {
-        for (x in 0 until width) {
-            if ((Color.red(bitmap.getPixel(x, y))) > 125) {
-                bitSet.set(y * width + x)
-            }
+class matrixToBitCache(private val context: Context) {
+    fun save(matrix: matrixToBit) {
+        try {
+            val file = File(context.filesDir, "BitMatrixSave_${matrix.height}_${matrix.width}.bin")
+            file.writeBytes(matrix.data.toByteArray())
+        } catch (e: Exception) {
+            Log.e("BitMatrixCache", "Ошибка сохранения матрицы", e)
         }
     }
 
-    val cache = BitMatrixCache(context)
-    val matrix = BitMatrix(height, width, bitSet)
-
-    cache.save(matrix)
-
-    return matrix
-}
-
-// МОЖНО СКАЗАТЬ ОПТИМИЗАЕЙШОН
-fun initBitMatrix(context: Context): BitMatrix?{
-    // ПЫТАЕМСЯ ЗАГРУЗИТЬ КЕШУ
-    val cache = BitMatrixCache(context).load()
-
-    return try{ cache }
-    catch (e: Exception){
-        Log.e("BitMatrix", "Ошибка чтения кэша: ${e.message}")
-
-
-        // НЕ СМОГЛИ - ЗАГРУЗКА БИНКИ
-        return try{
-            imageToBitMatrix(context)
-        }
-        catch (e: Exception){
-            Log.e("BitMatrix", "Ошибка создания матрицы из изображения: ${e.message}")
+    fun load(): matrixToBit? {
+        return try {
+            val file = context.filesDir.listFiles()?.firstOrNull { it.name.startsWith("BitMatrixSave") }
+                ?: return null
+            val parts = file.name.removeSuffix(".bin").split("_")
+            val height = parts.getOrNull(1)?.toIntOrNull() ?: return null
+            val width = parts.getOrNull(2)?.toIntOrNull() ?: return null
+            matrixToBit(height, width, BitSet.valueOf(file.readBytes()))
+        } catch (e: Exception) {
+            Log.e("BitMatrixCache", "Ошибка загрузки матрицы", e)
             null
         }
+    }
+}
+
+fun imageToBitMatrix(context: Context): matrixToBit? {
+    return try {
+        val bitmap = context.assets.open("skeleton.png").use { BitmapFactory.decodeStream(it) }
+            ?: return null
+        val width = bitmap.width
+        val height = bitmap.height
+        val bitSet = BitSet(width * height)
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val p = bitmap.getPixel(x, y)
+                val bright = (Color.red(p) + Color.green(p) + Color.blue(p)) / 3
+                if (bright > 128) bitSet.set(y * width + x)
+            }
+        }
+        val matrix = matrixToBit(height, width, bitSet)
+        matrixToBitCache(context).save(matrix)
+        matrix
+    } catch (e: Exception) {
+        Log.e("ImageToBitMatrix", "Не удалась конвертация изображения", e)
+        null
+    }
+}
+
+fun initBitMatrix(context: Context): matrixToBit? {
+    return try {
+        matrixToBitCache(context).load() ?: imageToBitMatrix(context)
+    } catch (e: Exception) {
+        Log.e("MATRIX", "Ошибка инициализации матрицы", e)
+        imageToBitMatrix(context)
     }
 }
