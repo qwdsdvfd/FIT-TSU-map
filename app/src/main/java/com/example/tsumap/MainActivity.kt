@@ -1,5 +1,4 @@
 package com.example.tsumap
-
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,8 +32,16 @@ fun TSUMAPApp() {
     var statusMessage by remember { mutableStateOf("Нажмите От/До") }
     var statusColor by remember { mutableStateOf(Color(0xFF333333)) }
     var isSelectingStart by remember { mutableStateOf(false) }
-
     val context = LocalContext.current
+
+    // Загрузка точек из assets
+    val pointsOfInterest = remember {
+        runCatching {
+            context.assets.open("База_данных_магазинов.csv")
+                .bufferedReader()
+                .use { parsePointOfInterest(it.readText()) }
+        }.getOrElse { emptyList() }
+    }
 
     LaunchedEffect(Unit) {
         val matrix = initBitMatrix(context)
@@ -42,21 +49,19 @@ fun TSUMAPApp() {
     }
 
     fun computePath() {
-        val mat = PUBLICMATRIX.value
-        if (mat == null) return
+        val mat = PUBLICMATRIX.value ?: return
         val start = startPoint ?: return
         val end = endPoint ?: return
-        statusMessage = "Поиск пути..."
+        statusMessage = "Поиск пути... "
         statusColor = Color(0xFF757575)
         val result = aStar(mat, start, end)
         if (result != null) {
             pathPoints = result
-            statusMessage = "Маршрут найден"
+            statusMessage = "Маршрут найден "
             statusColor = Color(0xFF4CAF50)
-        }
-        else {
+        } else {
             pathPoints = emptyList()
-            statusMessage = "Путь не существует"
+            statusMessage = "Путь не существует "
             statusColor = Color(0xFFF44336)
         }
     }
@@ -66,7 +71,7 @@ fun TSUMAPApp() {
         endPoint = null
         pathPoints = emptyList()
         isSelectingStart = false
-        statusMessage = "Нажмите От/До и выберите точку старта"
+        statusMessage = "Нажмите От/До и выберите точку старта "
         statusColor = Color(0xFF606060)
     }
 
@@ -75,6 +80,30 @@ fun TSUMAPApp() {
             pathPoints = pathPoints,
             startPoint = startPoint,
             endPoint = endPoint,
+            pointsOfInterest = pointsOfInterest,
+            onPointOfInterestTap = { pointOfInterest ->
+                when {
+                    isSelectingStart -> {
+                        startPoint = pointOfInterest.pos
+                        endPoint = null
+                        pathPoints = emptyList()
+                        isSelectingStart = false
+                        statusMessage = "Старт: ${pointOfInterest.name}. Выберите цель."
+                        statusColor = Color(0xFF606060)
+                    }
+                    startPoint != null && endPoint == null -> {
+                        endPoint = pointOfInterest.pos
+                        pathPoints = emptyList()
+                        computePath()
+                    }
+                    else -> {
+                        resetAll()
+                        isSelectingStart = true
+                        statusMessage = "Нажмите на карту или точку, чтобы выбрать старт"
+                        statusColor = Color(0xFF606060)
+                    }
+                }
+            },
             onTap = { point ->
                 when {
                     isSelectingStart -> {
@@ -82,7 +111,7 @@ fun TSUMAPApp() {
                         endPoint = null
                         pathPoints = emptyList()
                         isSelectingStart = false
-                        statusMessage = "Старт выбран,  нажмите для выбора цели"
+                        statusMessage = "Старт выбран, нажмите для выбора цели"
                         statusColor = Color(0xFF606060)
                     }
                     startPoint != null && endPoint == null -> {
@@ -120,11 +149,8 @@ fun TSUMAPApp() {
                 }
             },
             containerColor = Color(0xFF4CAF50),
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(16.dp)
-        )
-        {
+            modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
+        ) {
             Text("От/До", fontSize = 24.sp)
         }
 
@@ -132,8 +158,7 @@ fun TSUMAPApp() {
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
             color = statusColor,
             shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
-        )
-        {
+        ) {
             Text(
                 text = statusMessage,
                 color = Color.White,

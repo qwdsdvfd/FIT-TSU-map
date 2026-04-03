@@ -1,5 +1,4 @@
 package com.example.tsumap
-
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -37,6 +36,8 @@ fun MapFromAssets(
     pathPoints: List<dataMap>,
     startPoint: dataMap?,
     endPoint: dataMap?,
+    pointsOfInterest: List<pointOfInterest> = emptyList(),
+    onPointOfInterestTap: (pointOfInterest) -> Unit = {},
     onTap: (dataMap) -> Unit,
     onDoubleTap: (() -> Unit)? = null
 ) {
@@ -62,17 +63,23 @@ fun MapFromAssets(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { canvasSize = it }
-            .pointerInput(onTap, onDoubleTap) {
+            .pointerInput(pathPoints, startPoint, endPoint, pointsOfInterest, onTap, onDoubleTap) {
                 detectTapGestures(
                     onTap = { tapOffset ->
-                        val point = screenToImage(tapOffset.x, tapOffset.y, layout)
-                        if (point.x in 0 until bitmap.width && point.y in 0 until bitmap.height) {
-                            onTap(point)
+                        val tapPixel = screenToImage(tapOffset.x, tapOffset.y, layout)
+                        // Проверяем, попали ли в точку (круг радиусом ~20px)
+                        val hitPoint = pointsOfInterest.find {
+                            val dx = it.pos.x - tapPixel.x
+                            val dy = it.pos.y - tapPixel.y
+                            dx * dx + dy * dy < 400
+                        }
+                        if (hitPoint != null) {
+                            onPointOfInterestTap(hitPoint)
+                        } else if (tapPixel.x in 0 until bitmap.width && tapPixel.y in 0 until bitmap.height) {
+                            onTap(tapPixel)
                         }
                     },
-                    onDoubleTap = {
-                        onDoubleTap?.invoke()
-                    }
+                    onDoubleTap = { onDoubleTap?.invoke() }
                 )
             }
     ) {
@@ -85,16 +92,15 @@ fun MapFromAssets(
             )
         )
 
-        if (pathPoints.size > 1) {
-            drawRoute(pathPoints, layout)
-        }
+        if (pathPoints.size > 1) drawRoute(pathPoints, layout)
+        if (startPoint != null) drawMarker(startPoint, layout, Color(0xFF1B5E20), Color(0xFF66BB6A))
+        if (endPoint != null) drawMarker(endPoint, layout, Color(0xFF7F0000), Color(0xFFEF5350))
 
-        if (startPoint != null) {
-            drawMarker(startPoint, layout, Color(0xFF1B5E20), Color(0xFF66BB6A))
-        }
-
-        if (endPoint != null) {
-            drawMarker(endPoint, layout, Color(0xFF7F0000), Color(0xFFEF5350))
+        // Отрисовка точек интереса
+        pointsOfInterest.forEach { point ->
+            val screenPos = imageToScreen(point.pos, layout)
+            drawCircle(Color(0xFFFFC107), radius = 9f * layout.scale, center = screenPos)
+            drawCircle(Color.White, radius = 4f * layout.scale, center = screenPos)
         }
     }
 }
