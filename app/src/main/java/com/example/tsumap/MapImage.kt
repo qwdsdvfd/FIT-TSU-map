@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -112,6 +113,26 @@ fun MapFromAssets(
             val screenPos = imageToScreen(point.pos, layout)
             drawCircle(getPoiColor(point.type), radius = 20f * layout.scale, center = screenPos)
             drawCircle(Color.White, radius = 4f * layout.scale, center = screenPos)
+            drawContext.canvas.nativeCanvas.apply {
+                val paintStroke = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE
+                    textSize = 24f * layout.scale
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    isAntiAlias = true
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 3f * layout.scale
+                }
+                drawText(point.name, screenPos.x + 24f * layout.scale,
+                                     screenPos.y + 8f * layout.scale, paintStroke)
+                val paintFill = android.graphics.Paint().apply {
+                    color = android.graphics.Color.BLACK
+                    textSize = 24f * layout.scale
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    isAntiAlias = true
+                }
+                drawText(point.name, screenPos.x + 24f * layout.scale,
+                                     screenPos.y + 8f * layout.scale, paintFill)
+            }
         }
     }
 }
