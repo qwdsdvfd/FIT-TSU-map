@@ -1,4 +1,5 @@
 package com.example.tsumap
+
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -6,11 +7,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -32,14 +31,11 @@ private fun screenToImage(sx: Float, sy: Float, l: ImageLayout): dataMap =
 private fun imageToScreen(p: dataMap, l: ImageLayout): Offset =
     Offset(p.x * l.scale + l.offsetX, p.y * l.scale + l.offsetY)
 
-private fun getPoiColor(type: String): Color{
-    return when{
-        type in setOf("cafe", "restaurant", "fast_food", "ice_cream") ->
-            Color(0xFFD2691E)
-        type.startsWith("shop_") ->
-            Color(0xFF4169E1)
-        type.startsWith("vending_machine") ->
-            Color(0xFFAA1AE8)
+private fun getPoiColor(type: String): Color {
+    return when {
+        type in setOf("cafe", "restaurant", "fast_food", "ice_cream") -> Color(0xFFD2691E)
+        type.startsWith("shop_") -> Color(0xFF4169E1)
+        type.startsWith("vending_machine") -> Color(0xFFAA1AE8)
         else -> Color.Gray
     }
 }
@@ -50,12 +46,14 @@ fun MapFromAssets(
     startPoint: dataMap?,
     endPoint: dataMap?,
     pointsOfInterest: List<pointOfInterest> = emptyList(),
+    obstacles: List<dataMap> = emptyList(),
     onPointOfInterestTap: (pointOfInterest) -> Unit = {},
     onTap: (dataMap) -> Unit,
-    onDoubleTap: (() -> Unit)? = null
+    onDoubleTap: (() -> Unit)? = null,
+    onLongTap: ((dataMap) -> Unit)? = null
 ) {
     val context = LocalContext.current
-    var imageBitmap by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
     LaunchedEffect(Unit) {
@@ -76,7 +74,7 @@ fun MapFromAssets(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { canvasSize = it }
-            .pointerInput(pathPoints, startPoint, endPoint, pointsOfInterest, onTap, onDoubleTap) {
+            .pointerInput(onTap, onDoubleTap, onLongTap) {
                 detectTapGestures(
                     onTap = { tapOffset ->
                         val tapPixel = screenToImage(tapOffset.x, tapOffset.y, layout)
@@ -91,7 +89,13 @@ fun MapFromAssets(
                             onTap(tapPixel)
                         }
                     },
-                    onDoubleTap = { onDoubleTap?.invoke() }
+                    onDoubleTap = { onDoubleTap?.invoke() },
+                    onLongPress = { longPressOffset ->
+                        val point = screenToImage(longPressOffset.x, longPressOffset.y, layout)
+                        if (point.x in 0 until bitmap.width && point.y in 0 until bitmap.height) {
+                            onLongTap?.invoke(point)
+                        }
+                    }
                 )
             }
     ) {
@@ -104,40 +108,16 @@ fun MapFromAssets(
             )
         )
 
-        if (pathPoints.size > 1) drawRoute(pathPoints, layout)
-        if (startPoint != null) drawMarker(startPoint, layout, Color(0xFF1B5E20), Color(0xFF66BB6A))
-        if (endPoint != null) drawMarker(endPoint, layout, Color(0xFF7F0000), Color(0xFFEF5350))
-
-        // Отрисовка точек интереса
-        pointsOfInterest.forEach { point ->
-            val screenPos = imageToScreen(point.pos, layout)
-            drawCircle(getPoiColor(point.type), radius = 20f * layout.scale, center = screenPos)
-            drawCircle(Color.White, radius = 4f * layout.scale, center = screenPos)
-            drawContext.canvas.nativeCanvas.apply {
-                val paintStroke = android.graphics.Paint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 24f * layout.scale
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    isAntiAlias = true
-                    style = android.graphics.Paint.Style.STROKE
-                    strokeWidth = 3f * layout.scale
-                }
-                drawText(point.name, screenPos.x + 24f * layout.scale,
-                                     screenPos.y + 8f * layout.scale, paintStroke)
-                val paintFill = android.graphics.Paint().apply {
-                    color = android.graphics.Color.BLACK
-                    textSize = 24f * layout.scale
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    isAntiAlias = true
-                }
-                drawText(point.name, screenPos.x + 24f * layout.scale,
-                                     screenPos.y + 8f * layout.scale, paintFill)
-            }
-        }
+        drawRoute(pathPoints, layout)
+        drawMarker(startPoint, layout, Color(0xFF1B5E20), Color(0xFF66BB6A))
+        drawMarker(endPoint, layout, Color(0xFF7F0000), Color(0xFFEF5350))
+        drawPointsOfInterest(pointsOfInterest, layout)
+        drawObstacles(obstacles, layout)
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRoute(points: List<dataMap>, layout: ImageLayout) {
+private fun DrawScope.drawRoute(points: List<dataMap>, layout: ImageLayout) {
+    if (points.size < 2) return
     val path = Path()
     val first = imageToScreen(points[0], layout)
     path.moveTo(first.x, first.y)
@@ -151,10 +131,46 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRoute(points: L
     drawPath(path, color = Color.Red, style = Stroke(width = 5f))
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawMarker(point: dataMap, layout: ImageLayout, outerColor: Color, innerColor: Color) {
+private fun DrawScope.drawMarker(point: dataMap?, layout: ImageLayout, outerColor: Color, innerColor: Color) {
+    if (point == null) return
     val center = imageToScreen(point, layout)
     val r = maxOf(14f, 14f * layout.scale)
     drawCircle(color = outerColor, radius = r + 3f, center = center)
     drawCircle(color = innerColor, radius = r, center = center)
     drawCircle(color = Color.White, radius = r * 0.45f, center = center)
+}
+
+private fun DrawScope.drawPointsOfInterest(points: List<pointOfInterest>, layout: ImageLayout) {
+    points.forEach { poi ->
+        val screenPos = imageToScreen(poi.pos, layout)
+        drawCircle(getPoiColor(poi.type), radius = 20f * layout.scale, center = screenPos)
+        drawCircle(Color.White, radius = 4f * layout.scale, center = screenPos)
+        drawContext.canvas.nativeCanvas.apply {
+            val paintStroke = android.graphics.Paint().apply {
+                color = android.graphics.Color.WHITE
+                textSize = 24f * layout.scale
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                isAntiAlias = true
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = 3f * layout.scale
+            }
+            drawText(poi.name, screenPos.x + 24f * layout.scale, screenPos.y + 8f * layout.scale, paintStroke)
+            val paintFill = android.graphics.Paint().apply {
+                color = android.graphics.Color.BLACK
+                textSize = 24f * layout.scale
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                isAntiAlias = true
+            }
+            drawText(poi.name, screenPos.x + 24f * layout.scale, screenPos.y + 8f * layout.scale, paintFill)
+        }
+    }
+}
+
+private fun DrawScope.drawObstacles(obstacles: List<dataMap>, layout: ImageLayout) {
+    val radius = maxOf(8f, 8f * layout.scale)
+    for (obs in obstacles) {
+        val center = imageToScreen(obs, layout)
+        drawCircle(color = Color(0xCCFF5722), radius = radius, center = center)
+        drawCircle(color = Color(0xFFBF360C), radius = radius, center = center, style = Stroke(width = 2f))
+    }
 }
