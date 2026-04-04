@@ -31,6 +31,18 @@ private fun screenToImage(sx: Float, sy: Float, l: ImageLayout): dataMap =
 private fun imageToScreen(p: dataMap, l: ImageLayout): Offset =
     Offset(p.x * l.scale + l.offsetX, p.y * l.scale + l.offsetY)
 
+private fun getPoiColor(type: String): Color{
+    return when{
+        type in setOf("cafe", "restaurant", "fast_food", "ice_cream") ->
+            Color(0xFFD2691E)
+        type.startsWith("shop_") ->
+            Color(0xFF4169E1)
+        type.startsWith("vending_machine") ->
+            Color(0xFFAA1AE8)
+        else -> Color.Gray
+    }
+}
+
 @Composable
 fun MapFromAssets(
     pathPoints: List<dataMap>,
@@ -67,7 +79,6 @@ fun MapFromAssets(
                 detectTapGestures(
                     onTap = { tapOffset ->
                         val tapPixel = screenToImage(tapOffset.x, tapOffset.y, layout)
-                        // Проверяем, попали ли в точку (круг радиусом ~20px)
                         val hitPoint = pointsOfInterest.find {
                             val dx = it.pos.x - tapPixel.x
                             val dy = it.pos.y - tapPixel.y
@@ -99,7 +110,7 @@ fun MapFromAssets(
         // Отрисовка точек интереса
         pointsOfInterest.forEach { point ->
             val screenPos = imageToScreen(point.pos, layout)
-            drawCircle(Color(0xFFFFC107), radius = 9f * layout.scale, center = screenPos)
+            drawCircle(getPoiColor(point.type), radius = 20f * layout.scale, center = screenPos)
             drawCircle(Color.White, radius = 4f * layout.scale, center = screenPos)
         }
     }

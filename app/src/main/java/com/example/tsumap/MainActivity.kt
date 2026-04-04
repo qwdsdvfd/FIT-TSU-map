@@ -37,7 +37,7 @@ fun TSUMAPApp() {
     // Загрузка точек из assets
     val pointsOfInterest = remember {
         runCatching {
-            context.assets.open("База_данных_магазинов.csv")
+            context.assets.open("База_данных_магазинов - Магазины.csv")
                 .bufferedReader()
                 .use { parsePointOfInterest(it.readText()) }
         }.getOrElse { emptyList() }
@@ -148,7 +148,7 @@ fun TSUMAPApp() {
                     }
                 }
             },
-            containerColor = Color(0xFF4CAF50),
+            containerColor = Color(0xFF4169E1),
             modifier = Modifier.align(Alignment.TopStart).padding(16.dp)
         ) {
             Text("От/До", fontSize = 24.sp)
