@@ -1,9 +1,12 @@
 package com.example.tsumap
 
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -19,17 +22,11 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.content.Context
-import androidx.compose.foundation.clickable
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            TSUMAPTheme {
-                TSUMAPApp()
-            }
-        }
+        setContent { TSUMAPTheme { TSUMAPApp() } }
     }
 }
 
@@ -43,22 +40,23 @@ fun TSUMAPApp() {
     var isSelectingStart by remember { mutableStateOf(false) }
     var selectedPoi by remember { mutableStateOf<pointOfInterest?>(null) }
     var showBottomDialog by remember { mutableStateOf(false) }
+    var showMatrixDialog by remember { mutableStateOf(false) }
+    var matrix5x5 by remember { mutableStateOf(List(5) { List(5) { false } }) }
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     val pointsOfInterest = remember {
         runCatching {
             context.assets.open("База_данных_магазинов - Магазины.csv")
-                .bufferedReader()
-                .use { parsePointOfInterest(it.readText()) }
+                .bufferedReader().use { parsePointOfInterest(it.readText()) }
         }.getOrElse { emptyList() }
     }
 
     val shopHoursMap = remember {
         runCatching {
             context.assets.open("База_данных_магазинов - Магазины.csv")
-                .bufferedReader()
-                .use { reader ->
+                .bufferedReader().use { reader ->
                     val lines = reader.readLines()
                     if (lines.isEmpty()) return@use emptyMap()
                     val header = lines.first().split(",")
@@ -75,28 +73,24 @@ fun TSUMAPApp() {
         }.getOrElse { emptyMap() }
     }
 
-    suspend fun saveObstacles(context: Context, points: List<dataMap>) {
-        withContext(Dispatchers.IO) {
-            val file = File(context.cacheDir, "obstacles.cache")
-            val data = points.joinToString(separator = ";") { "${it.x},${it.y}" }
-            file.writeText(data)
-        }
+    suspend fun saveObstacles(context: Context, points: List<dataMap>) = withContext(Dispatchers.IO) {
+        File(context.cacheDir, "obstacles.cache").writeText(
+            points.joinToString(separator = ";") { "${it.x},${it.y}" }
+        )
     }
 
-    suspend fun loadObstacles(context: Context): List<dataMap> {
-        return withContext(Dispatchers.IO) {
-            val file = File(context.cacheDir, "obstacles.cache")
-            if (!file.exists()) return@withContext emptyList()
-            val content = file.readText()
-            if (content.isBlank()) return@withContext emptyList()
-            content.split(";").mapNotNull { part ->
-                val coords = part.split(",")
-                if (coords.size == 2) {
-                    val x = coords[0].toIntOrNull()
-                    val y = coords[1].toIntOrNull()
-                    if (x != null && y != null) dataMap(x, y) else null
-                } else null
-            }
+    suspend fun loadObstacles(context: Context): List<dataMap> = withContext(Dispatchers.IO) {
+        val file = File(context.cacheDir, "obstacles.cache")
+        if (!file.exists()) return@withContext emptyList()
+        val content = file.readText()
+        if (content.isBlank()) return@withContext emptyList()
+        content.split(";").mapNotNull { part ->
+            val coords = part.split(",")
+            if (coords.size == 2) {
+                val x = coords[0].toIntOrNull()
+                val y = coords[1].toIntOrNull()
+                if (x != null && y != null) dataMap(x, y) else null
+            } else null
         }
     }
 
@@ -104,8 +98,7 @@ fun TSUMAPApp() {
         val mat = PUBLICMATRIX.value ?: return
         val start = startPoint ?: return
         val end = endPoint ?: return
-        val result = aStar(mat, start, end)
-        pathPoints = result ?: emptyList()
+        pathPoints = aStar(mat, start, end) ?: emptyList()
     }
 
     fun addObstacle(point: dataMap) {
@@ -116,17 +109,13 @@ fun TSUMAPApp() {
         for (dx in -radius..radius) {
             for (dy in -radius..radius) {
                 if (dx*dx + dy*dy <= radius*radius) {
-                    val x = snapped.x + dx
-                    val y = snapped.y + dy
-                    if (x in 0 until mat.width && y in 0 until mat.height) {
-                        PUBLICMATRIX.addObstruction(x, y)
-                    }
+                    val x = snapped.x + dx; val y = snapped.y + dy
+                    if (x in 0 until mat.width && y in 0 until mat.height) PUBLICMATRIX.addObstruction(x, y)
                 }
             }
         }
-        val newObstacles = obstacles + snapped
-        obstacles = newObstacles
-        scope.launch { saveObstacles(context, newObstacles) }
+        obstacles += snapped
+        scope.launch { saveObstacles(context, obstacles) }
         if (endPoint != null) computePath()
         Toast.makeText(context, "Препятствие добавлено", Toast.LENGTH_SHORT).show()
     }
@@ -134,39 +123,29 @@ fun TSUMAPApp() {
     fun removeObstacleAt(point: dataMap) {
         val mat = PUBLICMATRIX.value ?: return
         val toRemove = obstacles.find { obs ->
-            val dx = obs.x - point.x
-            val dy = obs.y - point.y
-            dx*dx + dy*dy <= 100
+            val dx = obs.x - point.x; val dy = obs.y - point.y; dx*dx + dy*dy <= 100
         } ?: return
         val radius = 5
         for (dx in -radius..radius) {
             for (dy in -radius..radius) {
                 if (dx*dx + dy*dy <= radius*radius) {
-                    val x = toRemove.x + dx
-                    val y = toRemove.y + dy
+                    val x = toRemove.x + dx; val y = toRemove.y + dy
                     if (x in 0 until mat.width && y in 0 until mat.height) {
                         val original = PUBLICMATRIX.value ?: continue
-                        val isWalkable = original.get(x, y)
-                        if (isWalkable) {
-                            PUBLICMATRIX.value?.set(x, y, true)
-                        }
+                        if (original.get(x, y)) PUBLICMATRIX.value?.set(x, y, true)
                     }
                 }
             }
         }
-        val newObstacles = obstacles - toRemove
-        obstacles = newObstacles
-        scope.launch { saveObstacles(context, newObstacles) }
+        obstacles -= toRemove
+        scope.launch { saveObstacles(context, obstacles) }
         if (endPoint != null) computePath()
         Toast.makeText(context, "Препятствие удалено", Toast.LENGTH_SHORT).show()
     }
 
     fun resetAll() {
-        startPoint = null
-        endPoint = null
-        pathPoints = emptyList()
-        isSelectingStart = false
-        isObstacleMode = false
+        startPoint = null; endPoint = null; pathPoints = emptyList()
+        isSelectingStart = false; isObstacleMode = false
     }
 
     LaunchedEffect(Unit) {
@@ -175,83 +154,44 @@ fun TSUMAPApp() {
         val loaded = loadObstacles(context)
         obstacles = loaded
         loaded.forEach { PUBLICMATRIX.addObstruction(it.x, it.y) }
+
+        val loadedMatrix = Matrix5x5Storage.load(context)
+        if (loadedMatrix != null) matrix5x5 = loadedMatrix
     }
 
     Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         MapFromAssets(
-            pathPoints = pathPoints,
-            startPoint = startPoint,
-            endPoint = endPoint,
-            pointsOfInterest = pointsOfInterest,
-            obstacles = obstacles,
+            pathPoints = pathPoints, startPoint = startPoint, endPoint = endPoint,
+            pointsOfInterest = pointsOfInterest, obstacles = obstacles,
             onPointOfInterestTap = { poi ->
-                if (isSelectingStart) {
-                    startPoint = poi.pos
-                    endPoint = null
-                    pathPoints = emptyList()
-                    isSelectingStart = false
-                } else if (startPoint != null && endPoint == null) {
-                    endPoint = poi.pos
-                    pathPoints = emptyList()
-                    computePath()
-                } else {
-                    selectedPoi = poi
-                    showBottomDialog = true
-                }
+                if (isSelectingStart) { startPoint = poi.pos; endPoint = null; pathPoints = emptyList(); isSelectingStart = false }
+                else if (startPoint != null && endPoint == null) { endPoint = poi.pos; pathPoints = emptyList(); computePath() }
+                else { selectedPoi = poi; showBottomDialog = true }
             },
             onTap = { point ->
                 when {
                     isObstacleMode -> addObstacle(point)
-                    isSelectingStart -> {
-                        startPoint = point
-                        endPoint = null
-                        pathPoints = emptyList()
-                        isSelectingStart = false
-                    }
-                    startPoint != null && endPoint == null -> {
-                        endPoint = point
-                        pathPoints = emptyList()
-                        computePath()
-                    }
-                    else -> { }
+                    isSelectingStart -> { startPoint = point; endPoint = null; pathPoints = emptyList(); isSelectingStart = false }
+                    startPoint != null && endPoint == null -> { endPoint = point; pathPoints = emptyList(); computePath() }
+                    else -> {}
                 }
             },
             onDoubleTap = { resetAll() },
-            onLongTap = { point ->
-                if (!isObstacleMode) {
-                    removeObstacleAt(point)
-                }
-            }
+            onLongTap = { point -> if (!isObstacleMode) removeObstacleAt(point) }
         )
 
         Row(modifier = Modifier.align(Alignment.TopStart).padding(16.dp)) {
             FloatingActionButton(
-                onClick = {
-                    when {
-                        startPoint == null && !isSelectingStart -> isSelectingStart = true
-                        !(startPoint != null && endPoint == null) -> {
-                            resetAll()
-                            isSelectingStart = true
-                        }
-                    }
-                },
-                containerColor = Color(0xFF3E55A2),
-                contentColor = Color.White,
-                modifier = Modifier
-                    .width(80.dp)
-                    .height(48.dp)
-            ) {
-                Text("От/До", fontSize = 14.sp)
-            }
+                onClick = { if (startPoint == null && !isSelectingStart) isSelectingStart = true else { resetAll(); isSelectingStart = true } },
+                containerColor = Color(0xFF3E55A2), contentColor = Color.White,
+                modifier = Modifier.width(80.dp).height(48.dp)
+            ) { Text("От/До", fontSize = 14.sp) }
             Spacer(modifier = Modifier.width(8.dp))
             FloatingActionButton(
                 onClick = { isObstacleMode = !isObstacleMode },
                 containerColor = if (isObstacleMode) Color(0xFFFF5722) else Color(0xFF9E9E9E),
-                contentColor = Color.White,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Text("-", fontSize = 24.sp)
-            }
+                contentColor = Color.White, modifier = Modifier.size(48.dp)
+            ) { Text("-", fontSize = 24.sp) }
         }
     }
 
@@ -262,51 +202,43 @@ fun TSUMAPApp() {
 
         androidx.compose.ui.window.Popup(
             onDismissRequest = { showBottomDialog = false },
-            properties = androidx.compose.ui.window.PopupProperties(
-                focusable = true,
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true
-            )
+            properties = androidx.compose.ui.window.PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = true)
         ) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        onClick = { showBottomDialog = false },
-                        indication = null,
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    ),
+                modifier = Modifier.fillMaxSize()
+                    .clickable(onClick = { showBottomDialog = false }, indication = null,
+                        interactionSource = remember { MutableInteractionSource() }),
                 contentAlignment = Alignment.BottomCenter
             ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 32.dp)
-                        .navigationBarsPadding(),
+                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 32.dp).navigationBarsPadding(),
                     shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                         Text(poi.name, fontSize = 20.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         Text("Часы работы: $hoursDisplay", fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = {
-                                Toast.makeText(context, "Пустышка", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Тестовая кнопка")
-                        }
+                        Button(onClick = { showMatrixDialog = true }, modifier = Modifier.fillMaxWidth()) { Text("Сделать отзыв") }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
             }
         }
+    }
+
+    if (showMatrixDialog) {
+        MatrixDrawingDialog(
+            matrix = matrix5x5,
+            onToggleCell = { r, c ->
+                matrix5x5 = matrix5x5.mapIndexed { i, row ->
+                    if (i == r) row.mapIndexed { j, cell -> if (j == c) !cell else cell } else row
+                }
+            },
+            onSave = {
+                scope.launch { Matrix5x5Storage.save(context, matrix5x5) }
+                showMatrixDialog = false
+            },
+            onDismiss = { showMatrixDialog = false }
+        )
     }
 }
