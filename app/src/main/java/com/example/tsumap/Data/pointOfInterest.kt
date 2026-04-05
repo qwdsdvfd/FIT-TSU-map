@@ -1,4 +1,6 @@
-package com.example.tsumap
+package com.example.tsumap.Data
+
+import com.example.tsumap.dataMap
 
 data class pointOfInterest(val id: Int, val name: String, val type: String, val pos: dataMap)
 

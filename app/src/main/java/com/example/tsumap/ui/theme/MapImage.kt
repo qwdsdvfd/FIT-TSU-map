@@ -1,6 +1,8 @@
-package com.example.tsumap
+package com.example.tsumap.ui.theme
 
 import android.graphics.BitmapFactory
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +17,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import com.example.tsumap.Data.pointOfInterest
+import com.example.tsumap.dataMap
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -146,19 +150,19 @@ private fun DrawScope.drawPointsOfInterest(points: List<pointOfInterest>, layout
         drawCircle(getPoiColor(poi.type), radius = 20f * layout.scale, center = screenPos)
         drawCircle(Color.White, radius = 4f * layout.scale, center = screenPos)
         drawContext.canvas.nativeCanvas.apply {
-            val paintStroke = android.graphics.Paint().apply {
+            val paintStroke = Paint().apply {
                 color = android.graphics.Color.WHITE
                 textSize = 24f * layout.scale
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                typeface = Typeface.DEFAULT_BOLD
                 isAntiAlias = true
-                style = android.graphics.Paint.Style.STROKE
+                style = Paint.Style.STROKE
                 strokeWidth = 3f * layout.scale
             }
             drawText(poi.name, screenPos.x + 24f * layout.scale, screenPos.y + 8f * layout.scale, paintStroke)
-            val paintFill = android.graphics.Paint().apply {
+            val paintFill = Paint().apply {
                 color = android.graphics.Color.BLACK
                 textSize = 24f * layout.scale
-                typeface = android.graphics.Typeface.DEFAULT_BOLD
+                typeface = Typeface.DEFAULT_BOLD
                 isAntiAlias = true
             }
             drawText(poi.name, screenPos.x + 24f * layout.scale, screenPos.y + 8f * layout.scale, paintFill)

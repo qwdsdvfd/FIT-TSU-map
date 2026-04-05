@@ -17,6 +17,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tsumap.Data.Matrix5x5Storage
+import com.example.tsumap.Data.parsePointOfInterest
+import com.example.tsumap.Data.pointOfInterest
+import com.example.tsumap.ui.theme.MapFromAssets
+import com.example.tsumap.ui.theme.MatrixDrawingDialog
 import com.example.tsumap.ui.theme.TSUMAPTheme
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -164,15 +169,27 @@ fun TSUMAPApp() {
             pathPoints = pathPoints, startPoint = startPoint, endPoint = endPoint,
             pointsOfInterest = pointsOfInterest, obstacles = obstacles,
             onPointOfInterestTap = { poi ->
-                if (isSelectingStart) { startPoint = poi.pos; endPoint = null; pathPoints = emptyList(); isSelectingStart = false }
-                else if (startPoint != null && endPoint == null) { endPoint = poi.pos; pathPoints = emptyList(); computePath() }
-                else { selectedPoi = poi; showBottomDialog = true }
+                if (isSelectingStart) {
+                    startPoint = poi.pos; endPoint = null; pathPoints =
+                        emptyList(); isSelectingStart = false
+                } else if (startPoint != null && endPoint == null) {
+                    endPoint = poi.pos; pathPoints = emptyList(); computePath()
+                } else {
+                    selectedPoi = poi; showBottomDialog = true
+                }
             },
             onTap = { point ->
                 when {
                     isObstacleMode -> addObstacle(point)
-                    isSelectingStart -> { startPoint = point; endPoint = null; pathPoints = emptyList(); isSelectingStart = false }
-                    startPoint != null && endPoint == null -> { endPoint = point; pathPoints = emptyList(); computePath() }
+                    isSelectingStart -> {
+                        startPoint = point; endPoint = null; pathPoints =
+                            emptyList(); isSelectingStart = false
+                    }
+
+                    startPoint != null && endPoint == null -> {
+                        endPoint = point; pathPoints = emptyList(); computePath()
+                    }
+
                     else -> {}
                 }
             },
