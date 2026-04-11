@@ -5,6 +5,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -18,22 +19,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.example.tsumap.Data.pointOfInterest
+import com.example.tsumap.MapViewportState
 import com.example.tsumap.dataMap
-import kotlin.math.min
+import com.example.tsumap.rememberMapViewportState
 import kotlin.math.roundToInt
-
-private data class ImageLayout(val scale: Float, val offsetX: Float, val offsetY: Float)
-
-private fun computeLayout(imgW: Float, imgH: Float, canvasW: Float, canvasH: Float): ImageLayout {
-    val scale = min(canvasW / imgW, canvasH / imgH)
-    return ImageLayout(scale, (canvasW - imgW * scale) / 2f, (canvasH - imgH * scale) / 2f)
-}
-
-private fun screenToImage(sx: Float, sy: Float, l: ImageLayout): dataMap =
-    dataMap(((sx - l.offsetX) / l.scale).roundToInt(), ((sy - l.offsetY) / l.scale).roundToInt())
-
-private fun imageToScreen(p: dataMap, l: ImageLayout): Offset =
-    Offset(p.x * l.scale + l.offsetX, p.y * l.scale + l.offsetY)
 
 private fun getPoiColor(type: String): Color {
     return when {
@@ -55,10 +44,13 @@ fun MapFromAssets(
     onTap: (dataMap) -> Unit,
     onDoubleTap: (() -> Unit)? = null,
     onLongTap: ((dataMap) -> Unit)? = null
-) {
+)
+{
     val context = LocalContext.current
     var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+
+    val viewportState = rememberMapViewportState()
 
     LaunchedEffect(Unit) {
         val bmp = context.assets.open("map_walk.png").use { BitmapFactory.decodeStream(it) }
@@ -67,113 +59,159 @@ fun MapFromAssets(
 
     val bitmap = imageBitmap ?: return
 
-    val layout = remember(bitmap, canvasSize) {
-        computeLayout(
-            bitmap.width.toFloat(), bitmap.height.toFloat(),
-            canvasSize.width.toFloat(), canvasSize.height.toFloat()
-        )
+    LaunchedEffect(bitmap, canvasSize) {
+        if (canvasSize.width > 0 && canvasSize.height > 0) {
+            viewportState.updateDimensions(
+                bitmap.width,
+                bitmap.height,
+                canvasSize.width,
+                canvasSize.height
+            )
+        }
     }
 
     Canvas(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
             .onSizeChanged { canvasSize = it }
+            .pointerInput(Unit) {
+                detectTransformGestures { _, pan, zoom, _ ->
+                    viewportState.panBy(pan.x, pan.y)
+                    viewportState.zoomBy(
+                        focus = Offset(size.width / 2f, size.height / 2f),
+                        factor = zoom
+                    )
+                }
+            }
             .pointerInput(onTap, onDoubleTap, onLongTap) {
                 detectTapGestures(
                     onTap = { tapOffset ->
-                        val tapPixel = screenToImage(tapOffset.x, tapOffset.y, layout)
-                        val hitPoint = pointsOfInterest.find {
-                            val dx = it.pos.x - tapPixel.x
-                            val dy = it.pos.y - tapPixel.y
-                            dx * dx + dy * dy < 400
-                        }
-                        if (hitPoint != null) {
-                            onPointOfInterestTap(hitPoint)
-                        } else if (tapPixel.x in 0 until bitmap.width && tapPixel.y in 0 until bitmap.height) {
-                            onTap(tapPixel)
+                        val tapPixel = viewportState.screenToImage(tapOffset.x, tapOffset.y)
+                        if (tapPixel != null) {
+                            val hitPoint = pointsOfInterest.find {
+                                val dx = it.pos.x - tapPixel.x
+                                val dy = it.pos.y - tapPixel.y
+                                dx * dx + dy * dy < 400
+                            }
+                            if (hitPoint != null) {
+                                onPointOfInterestTap(hitPoint)
+                            } else {
+                                onTap(tapPixel)
+                            }
                         }
                     },
                     onDoubleTap = { onDoubleTap?.invoke() },
                     onLongPress = { longPressOffset ->
-                        val point = screenToImage(longPressOffset.x, longPressOffset.y, layout)
-                        if (point.x in 0 until bitmap.width && point.y in 0 until bitmap.height) {
+                        val point = viewportState.screenToImage(longPressOffset.x, longPressOffset.y)
+                        if (point != null) {
                             onLongTap?.invoke(point)
                         }
                     }
                 )
             }
-    ) {
+    )
+    {
         drawImage(
             image = bitmap,
-            dstOffset = IntOffset(layout.offsetX.roundToInt(), layout.offsetY.roundToInt()),
+            dstOffset = IntOffset(
+                viewportState.X.roundToInt(),
+                viewportState.Y.roundToInt()
+            ),
             dstSize = IntSize(
-                (bitmap.width * layout.scale).roundToInt(),
-                (bitmap.height * layout.scale).roundToInt()
+                (bitmap.width * viewportState.scale).roundToInt(),
+                (bitmap.height * viewportState.scale).roundToInt()
             )
         )
 
-        drawRoute(pathPoints, layout)
-        drawMarker(startPoint, layout, Color(0xFF1B5E20), Color(0xFF66BB6A))
-        drawMarker(endPoint, layout, Color(0xFF7F0000), Color(0xFFEF5350))
-        drawPointsOfInterest(pointsOfInterest, layout)
-        drawObstacles(obstacles, layout)
+        drawRoute(pathPoints, viewportState)
+        drawMarker(startPoint, viewportState, Color(0xFF1B5E20), Color(0xFF66BB6A))
+        drawMarker(endPoint, viewportState, Color(0xFF7F0000), Color(0xFFEF5350))
+        drawPointsOfInterest(pointsOfInterest, viewportState)
+        drawObstacles(obstacles, viewportState)
     }
 }
 
-private fun DrawScope.drawRoute(points: List<dataMap>, layout: ImageLayout) {
+private fun DrawScope.drawRoute(points: List<dataMap>, viewport: MapViewportState) {
     if (points.size < 2) return
     val path = Path()
-    val first = imageToScreen(points[0], layout)
+    val first = viewport.imageToScreen(points[0])
     path.moveTo(first.x, first.y)
     val step = maxOf(1, points.size / 3000)
     for (i in 1 until points.size step step) {
-        val pt = imageToScreen(points[i], layout)
+        val pt = viewport.imageToScreen(points[i])
         path.lineTo(pt.x, pt.y)
     }
-    val last = imageToScreen(points.last(), layout)
+    val last = viewport.imageToScreen(points.last())
     path.lineTo(last.x, last.y)
     drawPath(path, color = Color.Red, style = Stroke(width = 5f))
 }
 
-private fun DrawScope.drawMarker(point: dataMap?, layout: ImageLayout, outerColor: Color, innerColor: Color) {
+private fun DrawScope.drawMarker(
+    point: dataMap?,
+    viewport: MapViewportState,
+    outerColor: Color,
+    innerColor: Color
+)
+{
     if (point == null) return
-    val center = imageToScreen(point, layout)
-    val r = maxOf(14f, 14f * layout.scale)
+    val center = viewport.imageToScreen(point)
+    val r = 14f
     drawCircle(color = outerColor, radius = r + 3f, center = center)
     drawCircle(color = innerColor, radius = r, center = center)
     drawCircle(color = Color.White, radius = r * 0.45f, center = center)
 }
 
-private fun DrawScope.drawPointsOfInterest(points: List<pointOfInterest>, layout: ImageLayout) {
+private fun DrawScope.drawPointsOfInterest(
+    points: List<pointOfInterest>,
+    viewport: MapViewportState
+)
+{
     points.forEach { poi ->
-        val screenPos = imageToScreen(poi.pos, layout)
-        drawCircle(getPoiColor(poi.type), radius = 20f * layout.scale, center = screenPos)
-        drawCircle(Color.White, radius = 4f * layout.scale, center = screenPos)
-        drawContext.canvas.nativeCanvas.apply {
-            val paintStroke = Paint().apply {
+        val screenPos = viewport.imageToScreen(poi.pos)
+        val markerRadius = 28f
+        drawCircle(getPoiColor(poi.type), radius = markerRadius, center = screenPos)
+        drawCircle(Color.White, radius = 6f, center = screenPos)
+
+        drawContext.canvas.nativeCanvas.apply{
+            val textSize = 45f
+            val paintStroke = Paint().apply{
                 color = android.graphics.Color.WHITE
-                textSize = 24f * layout.scale
+                this.textSize = textSize
                 typeface = Typeface.DEFAULT_BOLD
                 isAntiAlias = true
                 style = Paint.Style.STROKE
-                strokeWidth = 3f * layout.scale
+                strokeWidth = 4f
             }
-            drawText(poi.name, screenPos.x + 24f * layout.scale, screenPos.y + 8f * layout.scale, paintStroke)
-            val paintFill = Paint().apply {
+            drawText(
+                poi.name,
+                screenPos.x + 32f,
+                screenPos.y + 12f,
+                paintStroke
+            )
+            val paintFill = Paint().apply{
                 color = android.graphics.Color.BLACK
-                textSize = 24f * layout.scale
+                this.textSize = textSize
                 typeface = Typeface.DEFAULT_BOLD
                 isAntiAlias = true
             }
-            drawText(poi.name, screenPos.x + 24f * layout.scale, screenPos.y + 8f * layout.scale, paintFill)
+            drawText(
+                poi.name,
+                screenPos.x + 32f,
+                screenPos.y + 12f,
+                paintFill
+            )
         }
     }
 }
 
-private fun DrawScope.drawObstacles(obstacles: List<dataMap>, layout: ImageLayout) {
-    val radius = maxOf(8f, 8f * layout.scale)
+private fun DrawScope.drawObstacles(
+    obstacles: List<dataMap>,
+    viewport: MapViewportState
+)
+{
+    val radius = 8f
     for (obs in obstacles) {
-        val center = imageToScreen(obs, layout)
+        val center = viewport.imageToScreen(obs)
         drawCircle(color = Color(0xCCFF5722), radius = radius, center = center)
         drawCircle(color = Color(0xFFBF360C), radius = radius, center = center, style = Stroke(width = 2f))
     }
