@@ -16,13 +16,22 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import com.example.tsumap.*
 import com.example.tsumap.Data.pointOfInterest
-import com.example.tsumap.MapViewportState
-import com.example.tsumap.dataMap
-import com.example.tsumap.rememberMapViewportState
 import kotlin.math.roundToInt
+
+private fun getCategoryColor(category: String): Color {
+    return when (category) {
+        "food" -> Color(0xFFD2691E)
+        "shop" -> Color(0xFF4169E1)
+        "vending" -> Color(0xFFAA1AE8)
+        else -> Color.Gray
+    }
+}
 
 private fun getPoiColor(type: String): Color {
     return when {
@@ -44,8 +53,7 @@ fun MapFromAssets(
     onTap: (dataMap) -> Unit,
     onDoubleTap: (() -> Unit)? = null,
     onLongTap: ((dataMap) -> Unit)? = null
-)
-{
+) {
     val context = LocalContext.current
     var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
@@ -70,6 +78,27 @@ fun MapFromAssets(
         }
     }
 
+    val density = LocalDensity.current
+    val clusterer = remember(density) {
+        PoiClusterer(
+            density = density,
+            clusterRadius = 50.dp,
+            minScaleToUnfoldSmallClusters = 2.8f,
+            smallClusterThreshold = 2,
+            categoryClassifier = { poi ->
+                when {
+                    poi.type in setOf("cafe", "restaurant", "fast_food", "ice_cream") -> "food"
+                    poi.type.startsWith("shop_") -> "shop"
+                    poi.type.startsWith("vending_machine") -> "vending"
+                    else -> "other"
+                }
+            }
+        )
+    }
+    val clusterItems = remember(viewportState.scale, viewportState.X, viewportState.Y, pointsOfInterest) {
+        clusterer.cluster(pointsOfInterest, viewportState)
+    }
+
     Canvas(
         Modifier
             .fillMaxSize()
@@ -83,20 +112,30 @@ fun MapFromAssets(
                     )
                 }
             }
-            .pointerInput(onTap, onDoubleTap, onLongTap) {
+            .pointerInput(clusterItems, onTap, onDoubleTap, onLongTap) {
                 detectTapGestures(
                     onTap = { tapOffset ->
-                        val tapPixel = viewportState.screenToImage(tapOffset.x, tapOffset.y)
-                        if (tapPixel != null) {
-                            val hitPoint = pointsOfInterest.find {
-                                val dx = it.pos.x - tapPixel.x
-                                val dy = it.pos.y - tapPixel.y
-                                dx * dx + dy * dy < 400
+                        val hitItem = clusterItems.find { item ->
+                            val dx = item.screenPosition.x - tapOffset.x
+                            val dy = item.screenPosition.y - tapOffset.y
+                            val radius = when (item) {
+                                is ClusterItem.Single -> 28f
+                                is ClusterItem.Cluster -> 38f
                             }
-                            if (hitPoint != null) {
-                                onPointOfInterestTap(hitPoint)
-                            } else {
-                                onTap(tapPixel)
+                            dx * dx + dy * dy <= radius * radius
+                        }
+
+                        when (hitItem) {
+                            is ClusterItem.Single -> {
+                                onPointOfInterestTap(hitItem.poi)
+                            }
+                            is ClusterItem.Cluster -> {
+                                val focus = hitItem.screenPosition
+                                viewportState.zoomBy(focus, 1.5f)
+                            }
+                            null -> {
+                                val tapPixel = viewportState.screenToImage(tapOffset.x, tapOffset.y)
+                                tapPixel?.let { onTap(it) }
                             }
                         }
                     },
@@ -109,8 +148,7 @@ fun MapFromAssets(
                     }
                 )
             }
-    )
-    {
+    ) {
         drawImage(
             image = bitmap,
             dstOffset = IntOffset(
@@ -126,7 +164,7 @@ fun MapFromAssets(
         drawRoute(pathPoints, viewportState)
         drawMarker(startPoint, viewportState, Color(0xFF1B5E20), Color(0xFF66BB6A))
         drawMarker(endPoint, viewportState, Color(0xFF7F0000), Color(0xFFEF5350))
-        drawPointsOfInterest(pointsOfInterest, viewportState)
+        drawClusterItems(clusterItems, viewportState)
         drawObstacles(obstacles, viewportState)
     }
 }
@@ -151,8 +189,7 @@ private fun DrawScope.drawMarker(
     viewport: MapViewportState,
     outerColor: Color,
     innerColor: Color
-)
-{
+) {
     if (point == null) return
     val center = viewport.imageToScreen(point)
     val r = 14f
@@ -161,54 +198,99 @@ private fun DrawScope.drawMarker(
     drawCircle(color = Color.White, radius = r * 0.45f, center = center)
 }
 
-private fun DrawScope.drawPointsOfInterest(
-    points: List<pointOfInterest>,
+private fun DrawScope.drawClusterItems(
+    items: List<ClusterItem>,
     viewport: MapViewportState
-)
-{
-    points.forEach { poi ->
-        val screenPos = viewport.imageToScreen(poi.pos)
-        val markerRadius = 28f
-        drawCircle(getPoiColor(poi.type), radius = markerRadius, center = screenPos)
-        drawCircle(Color.White, radius = 6f, center = screenPos)
-
-        drawContext.canvas.nativeCanvas.apply{
-            val textSize = 45f
-            val paintStroke = Paint().apply{
-                color = android.graphics.Color.WHITE
-                this.textSize = textSize
-                typeface = Typeface.DEFAULT_BOLD
-                isAntiAlias = true
-                style = Paint.Style.STROKE
-                strokeWidth = 4f
+) {
+    items.forEach { item ->
+        when (item) {
+            is ClusterItem.Single -> {
+                drawSinglePoi(item.poi, item.screenPosition)
             }
-            drawText(
-                poi.name,
-                screenPos.x + 32f,
-                screenPos.y + 12f,
-                paintStroke
-            )
-            val paintFill = Paint().apply{
-                color = android.graphics.Color.BLACK
-                this.textSize = textSize
-                typeface = Typeface.DEFAULT_BOLD
-                isAntiAlias = true
+            is ClusterItem.Cluster -> {
+                drawCluster(item, viewport)
             }
-            drawText(
-                poi.name,
-                screenPos.x + 32f,
-                screenPos.y + 12f,
-                paintFill
-            )
         }
+    }
+}
+
+private fun DrawScope.drawSinglePoi(poi: pointOfInterest, screenPos: Offset) {
+    val markerRadius = 28f
+    drawCircle(getPoiColor(poi.type), radius = markerRadius, center = screenPos)
+    drawCircle(Color.White, radius = 6f, center = screenPos)
+
+    drawContext.canvas.nativeCanvas.apply {
+        val textSize = 45f
+        val paintStroke = Paint().apply {
+            color = android.graphics.Color.WHITE
+            this.textSize = textSize
+            typeface = Typeface.DEFAULT_BOLD
+            isAntiAlias = true
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
+        }
+        drawText(
+            poi.name,
+            screenPos.x + 32f,
+            screenPos.y + 12f,
+            paintStroke
+        )
+        val paintFill = Paint().apply {
+            color = android.graphics.Color.BLACK
+            this.textSize = textSize
+            typeface = Typeface.DEFAULT_BOLD
+            isAntiAlias = true
+        }
+        drawText(
+            poi.name,
+            screenPos.x + 32f,
+            screenPos.y + 12f,
+            paintFill
+        )
+    }
+}
+
+private fun DrawScope.drawCluster(cluster: ClusterItem.Cluster, viewport: MapViewportState) {
+    val center = cluster.screenPosition
+    val radius = 38f
+    val clusterColor = getCategoryColor(cluster.category)
+
+    drawCircle(color = clusterColor, radius = radius, center = center)
+    drawCircle(color = Color.White, radius = radius, center = center, style = Stroke(width = 3f))
+
+    drawContext.canvas.nativeCanvas.apply {
+        val text = cluster.size.toString()
+        val textSize = 36f
+        val paint = Paint().apply {
+            color = android.graphics.Color.WHITE
+            this.textSize = textSize
+            typeface = Typeface.DEFAULT_BOLD
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        val textBounds = android.graphics.Rect()
+        paint.getTextBounds(text, 0, text.length, textBounds)
+        drawText(text, center.x, center.y - (textBounds.top + textBounds.bottom) / 2f, paint)
+    }
+
+    drawContext.canvas.nativeCanvas.apply {
+        val text = "точек"
+        val textSize = 20f
+        val paint = Paint().apply {
+            color = android.graphics.Color.BLACK
+            this.textSize = textSize
+            typeface = Typeface.DEFAULT
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        drawText(text, center.x, center.y + radius + 20f, paint)
     }
 }
 
 private fun DrawScope.drawObstacles(
     obstacles: List<dataMap>,
     viewport: MapViewportState
-)
-{
+) {
     val radius = 8f
     for (obs in obstacles) {
         val center = viewport.imageToScreen(obs)
