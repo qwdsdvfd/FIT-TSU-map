@@ -35,6 +35,7 @@ private fun getCategoryColor(category: String): Color {
 
 private fun getPoiColor(type: String): Color {
     return when {
+        type == "sight" -> Color(0xFFFFD700)
         type in setOf("cafe", "restaurant", "fast_food", "ice_cream") -> Color(0xFFD2691E)
         type.startsWith("shop_") -> Color(0xFF4169E1)
         type.startsWith("vending_machine") -> Color(0xFFAA1AE8)
@@ -49,6 +50,7 @@ fun MapFromAssets(
     endPoint: dataMap?,
     pointsOfInterest: List<pointOfInterest> = emptyList(),
     obstacles: List<dataMap> = emptyList(),
+    selectedPoiIds: Set<Int> = emptySet(),
     onPointOfInterestTap: (pointOfInterest) -> Unit = {},
     onTap: (dataMap) -> Unit,
     onDoubleTap: (() -> Unit)? = null,
@@ -164,7 +166,7 @@ fun MapFromAssets(
         drawRoute(pathPoints, viewportState)
         drawMarker(startPoint, viewportState, Color(0xFF1B5E20), Color(0xFF66BB6A))
         drawMarker(endPoint, viewportState, Color(0xFF7F0000), Color(0xFFEF5350))
-        drawClusterItems(clusterItems, viewportState)
+        drawClusterItems(clusterItems, viewportState, selectedPoiIds)
         drawObstacles(obstacles, viewportState)
     }
 }
@@ -200,12 +202,13 @@ private fun DrawScope.drawMarker(
 
 private fun DrawScope.drawClusterItems(
     items: List<ClusterItem>,
-    viewport: MapViewportState
+    viewport: MapViewportState,
+    selectedPoiIds: Set<Int>
 ) {
     items.forEach { item ->
         when (item) {
             is ClusterItem.Single -> {
-                drawSinglePoi(item.poi, item.screenPosition)
+                drawSinglePoi(item.poi, item.screenPosition, selectedPoiIds)
             }
             is ClusterItem.Cluster -> {
                 drawCluster(item, viewport)
@@ -214,10 +217,49 @@ private fun DrawScope.drawClusterItems(
     }
 }
 
-private fun DrawScope.drawSinglePoi(poi: pointOfInterest, screenPos: Offset) {
+private fun DrawScope.drawSinglePoi(
+    poi: pointOfInterest,
+    screenPos: Offset,
+    selectedPoiIds: Set<Int>
+) {
     val markerRadius = 28f
-    drawCircle(getPoiColor(poi.type), radius = markerRadius, center = screenPos)
-    drawCircle(Color.White, radius = 6f, center = screenPos)
+    val isSelected = poi.id in selectedPoiIds
+    val baseColor = getPoiColor(poi.type)
+
+    drawCircle(baseColor, radius = markerRadius, center = screenPos)
+
+    if (isSelected) {
+        drawCircle(Color.Green, radius = markerRadius + 4f, center = screenPos, style = Stroke(width = 4f))
+    }
+
+    if (poi.type == "sight") {
+        val starRadius = markerRadius * 0.6f
+        val angles = (0..4).map { 90f - it * 72f }
+        val outerPoints = angles.map { angle ->
+            Offset(
+                screenPos.x + starRadius * kotlin.math.cos(Math.toRadians(angle.toDouble())).toFloat(),
+                screenPos.y + starRadius * kotlin.math.sin(Math.toRadians(angle.toDouble())).toFloat()
+            )
+        }
+        val innerRadius = starRadius * 0.4f
+        val innerPoints = angles.map { angle ->
+            Offset(
+                screenPos.x + innerRadius * kotlin.math.cos(Math.toRadians((angle + 36).toDouble())).toFloat(),
+                screenPos.y + innerRadius * kotlin.math.sin(Math.toRadians((angle + 36).toDouble())).toFloat()
+            )
+        }
+        val starPath = Path().apply {
+            for (i in 0..4) {
+                if (i == 0) moveTo(outerPoints[i].x, outerPoints[i].y)
+                else lineTo(outerPoints[i].x, outerPoints[i].y)
+                lineTo(innerPoints[i].x, innerPoints[i].y)
+            }
+            close()
+        }
+        drawPath(starPath, color = Color.White)
+    } else {
+        drawCircle(Color.White, radius = 6f, center = screenPos)
+    }
 
     drawContext.canvas.nativeCanvas.apply {
         val textSize = 45f
@@ -229,24 +271,14 @@ private fun DrawScope.drawSinglePoi(poi: pointOfInterest, screenPos: Offset) {
             style = Paint.Style.STROKE
             strokeWidth = 4f
         }
-        drawText(
-            poi.name,
-            screenPos.x + 32f,
-            screenPos.y + 12f,
-            paintStroke
-        )
+        drawText(poi.name, screenPos.x + 32f, screenPos.y + 12f, paintStroke)
         val paintFill = Paint().apply {
             color = android.graphics.Color.BLACK
             this.textSize = textSize
             typeface = Typeface.DEFAULT_BOLD
             isAntiAlias = true
         }
-        drawText(
-            poi.name,
-            screenPos.x + 32f,
-            screenPos.y + 12f,
-            paintFill
-        )
+        drawText(poi.name, screenPos.x + 32f, screenPos.y + 12f, paintFill)
     }
 }
 
