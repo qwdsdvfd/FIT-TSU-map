@@ -1,8 +1,7 @@
-package com.example.tsumap.Data
+package com.example.tsumap.data
 
-import com.example.tsumap.dataMap
+import com.example.tsumap.algorithm.dataMap
 
-// Структура для данных достопримечательностей
 data class Attraction(
     val id: Int,
     val name: String,
@@ -13,7 +12,6 @@ data class Attraction(
     val rating: Float
 )
 
-// Функция для парсинга CSV файла достопримечательностей
 fun parseAttractions(csvContent: String): List<Attraction> {
     return csvContent.lineSequence()
         .drop(1) // Пропустить заголовок
@@ -36,7 +34,6 @@ fun parseAttractions(csvContent: String): List<Attraction> {
         .toList()
 }
 
-// Преобразовать Attraction в pointOfInterest
 fun Attraction.toPointOfInterest(): pointOfInterest {
     val x = ((this.longitude - MapBounds.minLength) / (MapBounds.maxWidth - MapBounds.minLength) * MapBounds.W).toInt()
     val y = ((MapBounds.maxLength - this.latitude) / (MapBounds.maxLength - MapBounds.minWidth) * MapBounds.H).toInt()

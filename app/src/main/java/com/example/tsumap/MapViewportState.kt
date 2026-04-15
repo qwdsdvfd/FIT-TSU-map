@@ -2,6 +2,7 @@ package com.example.tsumap
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
+import com.example.tsumap.algorithm.dataMap
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -9,8 +10,7 @@ class MapViewportState(
     initialScale: Float = 1f,
     private val minScale: Float = 0.5f,
     private val maxScale: Float = 4f
-)
-{
+) {
     var scale by mutableFloatStateOf(initialScale.coerceIn(minScale, maxScale))
         private set
 

@@ -1,6 +1,8 @@
-package com.example.tsumap.Data
+package com.example.tsumap.data
 
-import com.example.tsumap.dataMap
+import com.example.tsumap.algorithm.dataMap
+import com.example.tsumap.algorithm.PUBLICMATRIX
+import com.example.tsumap.algorithm.findNearWay
 
 data class pointOfInterest(val id: Int, val name: String, val type: String, val pos: dataMap)
 
@@ -25,11 +27,15 @@ fun parsePointOfInterest(csvContent: String): List<pointOfInterest> = csvContent
         val p = line.split(",")
         if (p.size < 5) return@mapNotNull null
         runCatching {
+            val rawPos = gpsToPixel(p[1].toDouble(), p[2].toDouble())
+            val walkablePos = PUBLICMATRIX.value?.let { matrix ->
+                if (matrix.get(rawPos.x, rawPos.y)) rawPos else findNearWay(matrix, rawPos)
+            } ?: rawPos
             pointOfInterest(
                 id = p[0].toInt(),
                 name = p[3].trim().removeSurrounding("\""),
                 type = p[4].trim(),
-                pos = gpsToPixel(p[1].toDouble(), p[2].toDouble())
+                pos = walkablePos ?: rawPos
             )
         }.getOrNull()
     }.toList()

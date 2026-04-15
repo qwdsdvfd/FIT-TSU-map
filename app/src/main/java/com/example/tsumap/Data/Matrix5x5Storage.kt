@@ -1,4 +1,4 @@
-package com.example.tsumap.Data
+package com.example.tsumap.data
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers

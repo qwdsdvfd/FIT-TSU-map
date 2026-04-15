@@ -2,6 +2,7 @@ package com.example.tsumap.ui.theme
 
 import android.graphics.BitmapFactory
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,9 +21,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.example.tsumap.*
-import com.example.tsumap.Data.pointOfInterest
+import com.example.tsumap.algorithm.ClusterItem
+import com.example.tsumap.data.pointOfInterest
+import com.example.tsumap.MapViewportState
+import com.example.tsumap.algorithm.PoiClusterer
+import com.example.tsumap.algorithm.dataMap
+import com.example.tsumap.rememberMapViewportState
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private fun getCategoryColor(category: String): Color {
     return when (category) {
@@ -237,15 +244,15 @@ private fun DrawScope.drawSinglePoi(
         val angles = (0..4).map { 90f - it * 72f }
         val outerPoints = angles.map { angle ->
             Offset(
-                screenPos.x + starRadius * kotlin.math.cos(Math.toRadians(angle.toDouble())).toFloat(),
-                screenPos.y + starRadius * kotlin.math.sin(Math.toRadians(angle.toDouble())).toFloat()
+                screenPos.x + starRadius * cos(Math.toRadians(angle.toDouble())).toFloat(),
+                screenPos.y + starRadius * sin(Math.toRadians(angle.toDouble())).toFloat()
             )
         }
         val innerRadius = starRadius * 0.4f
         val innerPoints = angles.map { angle ->
             Offset(
-                screenPos.x + innerRadius * kotlin.math.cos(Math.toRadians((angle + 36).toDouble())).toFloat(),
-                screenPos.y + innerRadius * kotlin.math.sin(Math.toRadians((angle + 36).toDouble())).toFloat()
+                screenPos.x + innerRadius * cos(Math.toRadians((angle + 36).toDouble())).toFloat(),
+                screenPos.y + innerRadius * sin(Math.toRadians((angle + 36).toDouble())).toFloat()
             )
         }
         val starPath = Path().apply {
@@ -300,7 +307,7 @@ private fun DrawScope.drawCluster(cluster: ClusterItem.Cluster, viewport: MapVie
             isAntiAlias = true
             textAlign = Paint.Align.CENTER
         }
-        val textBounds = android.graphics.Rect()
+        val textBounds = Rect()
         paint.getTextBounds(text, 0, text.length, textBounds)
         drawText(text, center.x, center.y - (textBounds.top + textBounds.bottom) / 2f, paint)
     }

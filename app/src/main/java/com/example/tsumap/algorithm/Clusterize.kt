@@ -1,9 +1,11 @@
-package com.example.tsumap
+package com.example.tsumap.algorithm
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import com.example.tsumap.Data.pointOfInterest
+import com.example.tsumap.data.pointOfInterest
+import com.example.tsumap.MapViewportState
+import kotlin.collections.iterator
 import kotlin.math.*
 
 sealed class ClusterItem {

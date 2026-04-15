@@ -1,4 +1,4 @@
-package com.example.tsumap.ui.theme
+package com.example.tsumap.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
