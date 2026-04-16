@@ -1,4 +1,4 @@
-Id_place,latitude,longitude,name,Type_shop,raw_tags/cuisine,raw_tags/opening_hours,feedback
+Id_place,latitude,longitude,name,Type_shop,raw_tags/cuisine,raw_tags/opening_hours,rating
 1,56.4608644,84.9505092,Чайная Обитель,cafe,,,0
 2,56.4674579,84.9540226,Питер,cafe,,,0
 3,56.469381,84.9468728,Минутка,cafe,,Mo-Fr 10:00-17:00,0
