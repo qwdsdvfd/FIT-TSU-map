@@ -44,12 +44,14 @@ fun imageToBitMatrix(context: Context): matrixToBit? {
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val p = bitmap.getPixel(x, y)
-                val bright = (Color.red(p) + Color.green(p) + Color.blue(p)) / 3
-                if (bright < 60) {
+                val brightness = (Color.red(p) + Color.green(p) + Color.blue(p)) / 3
+                if (brightness > 200) {
                     bitSet.set(y * width + x)
                 }
             }
         }
+
+
 
         val matrix = matrixToBit(height, width, bitSet)
 

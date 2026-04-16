@@ -52,10 +52,10 @@ fun TSUMAPApp() {
     var initMessage by remember { mutableStateOf("Загрузка карты...") }
 
     LaunchedEffect(Unit) {
-        navManager.start.collect { startPoint = it }
-        navManager.end.collect { endPoint = it }
-        navManager.path.collect { pathPoints = it }
-        navManager.obstacles.collect { obstacles = it }
+        launch { navManager.start.collect { startPoint = it } }
+        launch { navManager.end.collect { endPoint = it } }
+        launch { navManager.path.collect { pathPoints = it } }
+        launch { navManager.obstacles.collect { obstacles = it } }
     }
 
     var isSelectingStart by remember { mutableStateOf(false) }
